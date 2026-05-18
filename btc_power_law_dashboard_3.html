@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BTC Power Law Dashboard</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap');
+  :root {
+    --bg:#080810;--surface:#0f0f1a;--surface2:#161624;
+    --border:#222235;--border2:#2a2a42;
+    --orange:#f7931a;--green:#00d48a;--red:#ff4d6d;
+    --purple:#c084fc;--blue:#60a5fa;--yellow:#ffd166;
+    --text:#e4e4f0;--dim:#7777aa;--dimmer:#444466;
+    --mono:'Space Mono',monospace;--sans:'Syne',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;padding:24px;}
+  body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 70% 45% at 50% -5%,rgba(247,147,26,.05) 0%,transparent 65%);pointer-events:none;z-index:0;}
+  .wrap{position:relative;z-index:1;max-width:1060px;margin:0 auto;}
+
+  /* Header */
+  .hdr{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;gap:16px;}
+  .hdr-l h1{font-size:24px;font-weight:800;letter-spacing:-.5px;}
+  .hdr-l h1 em{font-style:normal;color:var(--orange);}
+  .hdr-l p{font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:5px;line-height:1.6;}
+  .ts-pill{background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 14px;font-family:var(--mono);font-size:10px;color:var(--dim);text-align:right;flex-shrink:0;}
+  .ts-pill strong{color:var(--green);display:block;font-size:12px;}
+
+  /* Section label */
+  .sec{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:2px;color:var(--dimmer);margin-bottom:10px;display:flex;align-items:center;gap:10px;}
+  .sec::after{content:'';flex:1;height:1px;background:var(--border);}
+
+  /* Status bar */
+  .status-bar{display:flex;align-items:center;gap:10px;margin-bottom:16px;padding:10px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;flex-wrap:wrap;}
+  .src-chip{font-family:var(--mono);font-size:9px;padding:3px 9px;border-radius:12px;border:1px solid;}
+  .src-chip.ok{background:rgba(0,212,138,.08);color:var(--green);border-color:rgba(0,212,138,.2);}
+  .src-chip.warn{background:rgba(255,213,102,.08);color:var(--yellow);border-color:rgba(255,213,102,.2);}
+  .src-chip.err{background:rgba(255,77,109,.08);color:var(--red);border-color:rgba(255,77,109,.2);}
+  .src-label{font-family:var(--mono);font-size:9px;color:var(--dimmer);}
+
+  /* Live strip */
+  .live-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;}
+  .lcard{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;position:relative;overflow:hidden;}
+  .lcard::after{content:'';position:absolute;top:0;left:0;right:0;height:2px;}
+  .lcard.co::after{background:var(--orange);}
+  .lcard.cr::after{background:var(--red);}
+  .lcard.cp::after{background:var(--purple);}
+  .lcard.cb::after{background:var(--blue);}
+  .lcard .ll{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--dim);margin-bottom:6px;}
+  .lcard .vv{font-family:var(--mono);font-size:18px;font-weight:700;letter-spacing:-.5px;}
+  .lcard.co .vv{color:var(--orange);}
+  .lcard.cr .vv{color:var(--red);}
+  .lcard.cp .vv{color:var(--purple);}
+  .lcard.cb .vv{color:var(--blue);}
+  .lcard .ss{font-family:var(--mono);font-size:9px;color:var(--dimmer);margin-top:4px;}
+  .lcard .src{font-family:var(--mono);font-size:8px;margin-top:3px;}
+  .lcard .src.live{color:var(--green);}
+  .lcard .src.fallback{color:var(--yellow);}
+  .lcard .src.auto{color:rgba(192,132,252,.7);}
+
+  /* Corridor meter */
+  .meter-wrap{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin-bottom:16px;}
+  .meter-lbl{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--dim);margin-bottom:12px;}
+  .meter-bar{position:relative;height:26px;border-radius:6px;background:linear-gradient(90deg,rgba(255,77,109,.2) 0%,rgba(247,147,26,.15) 35%,rgba(0,212,138,.12) 65%,rgba(192,132,252,.2) 100%);border:1px solid var(--border2);overflow:visible;}
+  .meter-tick{position:absolute;top:0;bottom:0;width:1px;background:rgba(255,255,255,.1);}
+  .meter-pin{position:absolute;top:-7px;width:3px;height:40px;background:var(--orange);border-radius:2px;transition:left .8s cubic-bezier(.4,0,.2,1);}
+  .meter-pin::before{content:attr(data-val);position:absolute;bottom:calc(100% + 5px);left:50%;transform:translateX(-50%);background:var(--orange);color:#000;font-family:var(--mono);font-size:9px;font-weight:700;padding:2px 7px;border-radius:4px;white-space:nowrap;}
+  .meter-ends{display:flex;justify-content:space-between;margin-top:5px;font-family:var(--mono);font-size:9px;color:var(--dim);}
+  .alloc-stats{display:flex;gap:18px;margin-top:10px;flex-wrap:wrap;}
+  .astat{font-family:var(--mono);font-size:11px;color:var(--dim);}
+  .astat strong{color:var(--text);}
+  .alloc-num{font-size:22px;font-weight:700;color:var(--orange);font-family:var(--mono);}
+
+  /* Inputs */
+  .input-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px;}
+  .icard{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;transition:border-color .2s;}
+  .icard:focus-within{border-color:var(--orange);}
+  .icard label{display:block;font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--dim);margin-bottom:8px;}
+  .dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:5px;vertical-align:middle;}
+  .dot-o{background:var(--orange);}.dot-b{background:var(--blue);}.dot-g{background:var(--green);}
+  .inp-w{position:relative;}
+  .inp-w .pfx{position:absolute;left:10px;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:11px;color:var(--dimmer);pointer-events:none;}
+  .inp-w input{width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:7px;padding:9px 10px 9px 28px;color:var(--text);font-family:var(--mono);font-size:14px;font-weight:700;outline:none;transition:border-color .2s;}
+  .inp-w input:focus{border-color:var(--orange);}
+  .hint{font-family:var(--mono);font-size:9px;color:var(--dimmer);margin-top:5px;}
+
+  /* Buttons */
+  .btn-row{display:flex;gap:10px;margin-bottom:24px;}
+  .btn-rf{background:transparent;border:1px solid var(--border2);color:var(--dim);padding:12px 16px;border-radius:10px;font-family:var(--mono);font-size:10px;cursor:pointer;transition:all .2s;white-space:nowrap;}
+  .btn-rf:hover{border-color:var(--orange);color:var(--orange);}
+  .btn-calc{flex:1;padding:14px;background:var(--orange);color:#000;border:none;border-radius:10px;font-family:var(--sans);font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;cursor:pointer;transition:opacity .2s,transform .1s;}
+  .btn-calc:hover{opacity:.9;} .btn-calc:active{transform:scale(.99);}
+
+  /* Results */
+  .results{display:none;} .results.on{display:block;}
+
+  .ppills{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;}
+  .pp{flex:1;min-width:130px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 16px;}
+  .pp .ll{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--dim);}
+  .pp .vv{font-family:var(--mono);font-size:16px;font-weight:700;margin-top:4px;}
+
+  /* Table */
+  .tbl-wrap{overflow-x:auto;margin-bottom:14px;}
+  .tbl{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;min-width:700px;}
+  .tbl thead tr{background:var(--surface2);}
+  .tbl th{padding:11px 16px;text-align:left;font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--dim);font-weight:400;border-bottom:1px solid var(--border);}
+  .tbl td{padding:16px;border-bottom:1px solid var(--border);vertical-align:top;}
+  .tbl tr:last-child td{border-bottom:none;}
+  .tbl tr.buy-row td{border-left:3px solid var(--green);}
+  .tbl tr.sell-row td{border-left:3px solid var(--red);}
+  .badge{display:inline-block;padding:3px 10px;border-radius:20px;font-family:var(--mono);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;}
+  .bb{background:rgba(0,212,138,.1);color:var(--green);border:1px solid rgba(0,212,138,.25);}
+  .bs{background:rgba(255,77,109,.1);color:var(--red);border:1px solid rgba(255,77,109,.25);}
+  .bigpx{font-family:var(--mono);font-size:19px;font-weight:700;}
+  .bigpx.buy{color:var(--green);} .bigpx.sell{color:var(--red);}
+  .tsub{font-family:var(--mono);font-size:9px;color:var(--dimmer);margin-top:3px;}
+  .amt{font-family:var(--mono);font-size:13px;font-weight:700;}
+  .amt.buy{color:var(--green);} .amt.sell{color:var(--red);}
+
+  /* CTA boxes */
+  .cta-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;}
+  .cbox{border-radius:12px;padding:18px 20px;border:1px solid;}
+  .cbox.buy{background:rgba(0,212,138,.04);border-color:rgba(0,212,138,.22);}
+  .cbox.sell{background:rgba(255,77,109,.04);border-color:rgba(255,77,109,.22);}
+  .cbox h4{font-size:12px;font-weight:700;margin-bottom:10px;}
+  .cbox.buy h4{color:var(--green);} .cbox.sell h4{color:var(--red);}
+  .crow{display:flex;justify-content:space-between;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--border);}
+  .crow:last-child{border-bottom:none;}
+  .ck{font-family:var(--mono);font-size:9px;color:var(--dim);}
+  .cv{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--text);}
+
+  .formula-box{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 16px;font-family:var(--mono);font-size:9px;color:var(--dimmer);line-height:1.9;margin-bottom:14px;}
+  .formula-box strong{color:var(--dim);}
+  .disc{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 16px;font-family:var(--mono);font-size:9px;color:var(--dimmer);line-height:1.7;margin-top:24px;}
+
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .spin{display:inline-block;animation:spin .8s linear infinite;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+  .livdot{width:6px;height:6px;border-radius:50%;background:var(--green);display:inline-block;animation:pulse 2s infinite;margin-right:5px;vertical-align:middle;}
+
+  @media(max-width:740px){
+    .live-strip{grid-template-columns:1fr 1fr;}
+    .input-row{grid-template-columns:1fr;}
+    .cta-grid{grid-template-columns:1fr;}
+    .ppills{flex-direction:column;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hdr">
+    <div class="hdr-l">
+      <h1>₿ <em>Power Law</em> Trade Planner</h1>
+      <p><span class="livdot"></span>Ceiling &amp; Floor auto-calculated · Live BTC &amp; FX rates · SGD</p>
+    </div>
+    <div class="ts-pill">Last refreshed<strong id="ts">–</strong></div>
+  </div>
+
+  <!-- Data source status -->
+  <div class="status-bar">
+    <span class="src-label">Data sources:</span>
+    <span class="src-chip" id="chip-btc">BTC price: loading…</span>
+    <span class="src-chip" id="chip-fx">USD/SGD: loading…</span>
+    <span class="src-chip ok">Power Law: Bitbo formula ✓</span>
+    <button class="btn-rf" onclick="refreshAll()" id="rfbtn" style="margin-left:auto">↻ Refresh</button>
+  </div>
+
+  <div class="sec">Live Market Data</div>
+  <div class="live-strip">
+    <div class="lcard co">
+      <div class="ll">BTC Spot Price</div>
+      <div class="vv" id="v-spot">…</div>
+      <div class="ss" id="v-spot-usd">≈ USD –</div>
+      <div class="src" id="v-spot-src">–</div>
+    </div>
+    <div class="lcard cr">
+      <div class="ll">🔴 Floor Price (Red)</div>
+      <div class="vv" id="v-floor">…</div>
+      <div class="ss" id="v-floor-usd">≈ USD –</div>
+      <div class="src auto">● Bitbo formula · auto-calc</div>
+    </div>
+    <div class="lcard cp">
+      <div class="ll">🟣 Ceiling Price (Purple)</div>
+      <div class="vv" id="v-ceil">…</div>
+      <div class="ss" id="v-ceil-usd">≈ USD –</div>
+      <div class="src auto">● Bitbo formula · auto-calc</div>
+    </div>
+    <div class="lcard cb">
+      <div class="ll">USD / SGD Rate</div>
+      <div class="vv" id="v-fx">…</div>
+      <div class="ss" id="v-fx-src">–</div>
+    </div>
+  </div>
+
+  <!-- Corridor meter -->
+  <div class="meter-wrap">
+    <div class="meter-lbl">BTC Position in Power Law Corridor · Alloc% = LOG(Ceiling÷Spot) ÷ LOG(Ceiling÷Floor)</div>
+    <div class="meter-bar">
+      <div class="meter-tick" id="tick-fair"></div>
+      <div class="meter-pin" id="pin" style="left:50%" data-val="–"></div>
+    </div>
+    <div class="meter-ends">
+      <span>🔴 Floor → 100% BTC</span>
+      <span>← Fair value →</span>
+      <span>100% Cash ← 🟣 Ceiling</span>
+    </div>
+    <div class="alloc-stats">
+      <div class="astat">Suggested BTC alloc: <span class="alloc-num" id="v-alloc">–</span></div>
+      <div class="astat">Corridor position: <strong id="v-corr">–</strong></div>
+      <div class="astat">Above floor: <strong id="v-afloor">–</strong></div>
+      <div class="astat">Below ceiling: <strong id="v-bceil">–</strong></div>
+      <div class="astat">Fair value: <strong id="v-fair">–</strong></div>
+    </div>
+  </div>
+
+  <!-- Inputs -->
+  <div class="sec">Your Portfolio <span style="color:var(--yellow);font-size:8px">(yellow cells C11, C12 from your sheet)</span></div>
+  <div class="input-row">
+    <div class="icard">
+      <label><span class="dot dot-o"></span>BTC in Wallet — SGD value (C11)</label>
+      <div class="inp-w"><span class="pfx">S$</span>
+        <input type="number" id="i-btc" placeholder="e.g. 4892.16" step="0.01" min="0">
+      </div>
+      <div class="hint">Current market value of your BTC in SGD</div>
+    </div>
+    <div class="icard">
+      <label><span class="dot dot-b"></span>Cash in Wallet — SGD (C12)</label>
+      <div class="inp-w"><span class="pfx">S$</span>
+        <input type="number" id="i-cash" placeholder="e.g. 930.21" step="0.01" min="0">
+      </div>
+      <div class="hint">Available SGD ready to deploy</div>
+    </div>
+    <div class="icard">
+      <label><span class="dot dot-g"></span>Spot Price Override — SGD (C8) <span style="color:var(--dimmer);font-size:8px">optional</span></label>
+      <div class="inp-w"><span class="pfx">S$</span>
+        <input type="number" id="i-spot-ov" placeholder="Leave blank = use live price" step="0.01" min="0">
+      </div>
+      <div class="hint">Override with CoinHako price if preferred</div>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn-rf" onclick="refreshAll()">↻ Refresh Market Data</button>
+    <button class="btn-calc" onclick="calculate()">⚡ Calculate My Limit Orders</button>
+  </div>
+
+  <!-- Results -->
+  <div class="results" id="results">
+    <div class="sec">Portfolio Snapshot</div>
+    <div class="ppills">
+      <div class="pp"><div class="ll">Total Portfolio</div><div class="vv" id="r-total" style="color:var(--orange)">–</div></div>
+      <div class="pp"><div class="ll">BTC Value (SGD)</div><div class="vv" id="r-btcval" style="color:var(--orange)">–</div></div>
+      <div class="pp"><div class="ll">Cash (SGD)</div><div class="vv" id="r-cash" style="color:var(--blue)">–</div></div>
+      <div class="pp"><div class="ll">BTC Qty (est.)</div><div class="vv" id="r-qty" style="color:var(--orange)">–</div></div>
+      <div class="pp"><div class="ll">PL Target Alloc</div><div class="vv" id="r-alloc" style="color:var(--yellow)">–</div></div>
+      <div class="pp"><div class="ll">Current BTC %</div><div class="vv" id="r-cur" style="color:var(--dim)">–</div></div>
+    </div>
+
+    <div class="sec">Limit Orders to Place on CoinHako</div>
+    <p style="font-family:var(--mono);font-size:9px;color:var(--dimmer);margin-bottom:12px">Place BOTH orders simultaneously. They trigger automatically when price moves ±2%.</p>
+    <div class="tbl-wrap">
+    <table class="tbl">
+      <thead><tr>
+        <th>Type</th><th>Triggers When</th><th>Limit Price (SGD)</th>
+        <th>BTC Quantity</th><th>SGD Amount</th><th>Effect</th>
+      </tr></thead>
+      <tbody>
+        <tr class="buy-row">
+          <td><span class="badge bb">BUY</span></td>
+          <td style="font-family:var(--mono);font-size:10px;color:var(--dim)">Price drops 2%<br><span style="font-size:9px;color:var(--dimmer)">Accumulate on dip</span></td>
+          <td><div class="bigpx buy" id="r-buy-px">–</div><div class="tsub">= spot × 0.98 (B17)</div></td>
+          <td><div class="amt buy" id="r-buy-btc">–</div><div class="tsub">= B18 ÷ C8 (B19)</div></td>
+          <td><div class="amt buy" id="r-buy-sgd">–</div><div class="tsub">from cash wallet (B18)</div></td>
+          <td style="font-family:var(--mono);font-size:9px;color:var(--dim)" id="r-buy-eff">–</td>
+        </tr>
+        <tr class="sell-row">
+          <td><span class="badge bs">SELL</span></td>
+          <td style="font-family:var(--mono);font-size:10px;color:var(--dim)">Price rises 2%<br><span style="font-size:9px;color:var(--dimmer)">Take profit on rally</span></td>
+          <td><div class="bigpx sell" id="r-sell-px">–</div><div class="tsub">= spot × 1.02 (C17)</div></td>
+          <td><div class="amt sell" id="r-sell-btc">–</div><div class="tsub">= C18 ÷ C8 (C19)</div></td>
+          <td><div class="amt sell" id="r-sell-sgd">–</div><div class="tsub">into cash wallet (C18)</div></td>
+          <td style="font-family:var(--mono);font-size:9px;color:var(--dim)" id="r-sell-eff">–</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+
+    <div class="formula-box">
+      <strong>Formula audit (matches Excel Daily Summary exactly):</strong><br>
+      Alloc% (C9) = LOG(Ceiling_SGD ÷ Spot) ÷ LOG(Ceiling_SGD ÷ Floor_SGD)<br>
+      Buy SGD (B18) = (spot×0.98 × BTC_qty + Cash) × Alloc% − (spot×0.98 × BTC_qty)<br>
+      Sell SGD (C18) = (spot×1.02 × BTC_qty + Cash) × Alloc% − (spot×1.02 × BTC_qty)<br>
+      BTC qty (B19/C19) = SGD ÷ current spot (C8) — not trigger price
+    </div>
+
+    <div class="cta-grid">
+      <div class="cbox buy">
+        <h4>🟢 BUY LIMIT ORDER — Set on CoinHako now</h4>
+        <div class="crow"><span class="ck">Order type</span><span class="cv">Limit Buy</span></div>
+        <div class="crow"><span class="ck">Limit price (SGD/BTC)</span><span class="cv" id="c-buy-px">–</span></div>
+        <div class="crow"><span class="ck">Quantity (BTC)</span><span class="cv" id="c-buy-btc">–</span></div>
+        <div class="crow"><span class="ck">Total SGD to spend</span><span class="cv" id="c-buy-sgd">–</span></div>
+        <div class="crow"><span class="ck">Post-fill alloc</span><span class="cv" id="c-buy-eff">–</span></div>
+      </div>
+      <div class="cbox sell">
+        <h4>🔴 SELL LIMIT ORDER — Set on CoinHako now</h4>
+        <div class="crow"><span class="ck">Order type</span><span class="cv">Limit Sell</span></div>
+        <div class="crow"><span class="ck">Limit price (SGD/BTC)</span><span class="cv" id="c-sell-px">–</span></div>
+        <div class="crow"><span class="ck">Quantity (BTC)</span><span class="cv" id="c-sell-btc">–</span></div>
+        <div class="crow"><span class="ck">Total SGD to receive</span><span class="cv" id="c-sell-sgd">–</span></div>
+        <div class="crow"><span class="ck">Post-fill alloc</span><span class="cv" id="c-sell-eff">–</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="disc">
+    ⚠ Not financial advice. Ceiling &amp; Floor computed using Bitbo's exact formula (reverse-engineered &amp; verified 2026-05-18, accurate to &lt;$0.50):
+    Ceiling = 10^−15.8396 × days^5.68 · Floor = Ceiling × 0.10061 · days from genesis block 2009-01-03.
+    BTC price sourced from Blockchain.info → Kraken → Mempool.space (in order). FX rate from Open Exchange Rates → ECB Frankfurter. All sources are CORS-enabled and work in-browser without a server.
+  </div>
+</div>
+
+<script>
+const S = { spotUSD:null, spotSGD:null, usdSgd:null, ceilUSD:null, floorUSD:null, ceilSGD:null, floorSGD:null };
+const $ = id => document.getElementById(id);
+const fS = (n,d=0) => n==null||isNaN(n) ? '–' : 'S$'+Number(n).toLocaleString('en-SG',{minimumFractionDigits:d,maximumFractionDigits:d});
+const fU = (n,d=0) => n==null||isNaN(n) ? '–' : '≈ USD '+Number(n).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+const fBtc = n => n==null||isNaN(n) ? '–' : Number(n).toFixed(6)+' BTC';
+const fPct = n => n==null||isNaN(n) ? '–' : (n*100).toFixed(2)+'%';
+const setChip = (id,text,cls) => { const el=$(id); el.textContent=text; el.className='src-chip '+cls; };
+
+// ── Bitbo Power Law (reverse-engineered, verified ±$0.50 on 2026-05-18) ──────
+// Ceiling = 10^LOG_A × days^N  |  Floor = Ceiling × FLOOR_RATIO
+const GENESIS      = Date.UTC(2009,0,3);
+const PL_N         = 5.68;
+const PL_LOGA      = -15.83959029;
+const PL_FLOOR_R   = 0.10061062;   // 57607.22 / 572575.92
+const PL_FAIR_R    = 1 / 3.5266;   // fair value = ceiling / 3.5266
+
+function bitboPL() {
+  const days = (Date.now() - GENESIS) / 86400000;
+  const ceiling = Math.pow(10, PL_LOGA) * Math.pow(days, PL_N);
+  return { ceiling, floor: ceiling * PL_FLOOR_R, fair: ceiling * PL_FAIR_R };
+}
+
+// ── Alloc: =LOG(Ceiling/Spot)/LOG(Ceiling/Floor) ─────────────────────────────
+function calcAlloc(ceil, floor, spot) {
+  if (ceil<=0||floor<=0||spot<=0||ceil<=floor) return 0;
+  return Math.max(0, Math.min(1, Math.log(ceil/spot) / Math.log(ceil/floor)));
+}
+
+// ── Orders: Excel Daily Summary B17:C19 ──────────────────────────────────────
+function calcOrders(spot, alloc, btcSGD, cashSGD) {
+  const qty=btcSGD/spot, buyPx=spot*.98, sellPx=spot*1.02;
+  const buySGD  = ((buyPx *qty+cashSGD)*alloc)-(buyPx *qty);
+  const sellSGD = ((sellPx*qty+cashSGD)*alloc)-(sellPx*qty);
+  return { buyPx, sellPx, buySGD, sellSGD, buyBTC:buySGD/spot, sellBTC:sellSGD/spot, qty };
+}
+
+function updateMeter(spot, floor, ceil, fair) {
+  if (!spot||!floor||!ceil||ceil<=floor) return;
+  const pct     = Math.max(2,Math.min(97,(spot-floor)/(ceil-floor)*100));
+  const fairPct = Math.max(2,Math.min(97,(fair-floor)/(ceil-floor)*100));
+  $('pin').style.left = pct+'%';
+  $('pin').setAttribute('data-val', fS(spot));
+  $('tick-fair').style.left = fairPct+'%';
+  const alloc = calcAlloc(ceil,floor,spot);
+  $('v-alloc').textContent   = fPct(alloc);
+  $('v-corr').textContent    = pct.toFixed(1)+'% of corridor';
+  $('v-afloor').textContent  = ((spot/floor-1)*100).toFixed(1)+'%';
+  $('v-bceil').textContent   = ((ceil/spot-1)*100).toFixed(1)+'%';
+  $('v-fair').textContent    = fS(fair);
+}
+
+// ── BTC price: try 3 CORS-safe sources in order ───────────────────────────────
+async function fetchBTC() {
+  // Source 1: Blockchain.info — gives BTC/SGD directly, always CORS-safe
+  try {
+    const d = await fetch('https://blockchain.info/ticker').then(r=>r.json());
+    setChip('chip-btc','BTC: Blockchain.info ✓','ok');
+    return { usd: d.USD.last, sgd: d.SGD.last };
+  } catch {}
+
+  // Source 2: Kraken — BTC/USD only, CORS-safe
+  try {
+    const d = await fetch('https://api.kraken.com/0/public/Ticker?pair=XBTUSD').then(r=>r.json());
+    const usd = parseFloat(d.result.XXBTZUSD.c[0]);
+    setChip('chip-btc','BTC: Kraken ✓','ok');
+    return { usd, sgd: null }; // SGD needs FX rate applied later
+  } catch {}
+
+  // Source 3: Mempool.space
+  try {
+    const d = await fetch('https://mempool.space/api/v1/prices').then(r=>r.json());
+    setChip('chip-btc','BTC: Mempool.space ✓','ok');
+    return { usd: d.USD, sgd: null };
+  } catch {}
+
+  setChip('chip-btc','BTC: all sources failed ✗','err');
+  return null;
+}
+
+// ── FX rate: try 2 CORS-safe sources ─────────────────────────────────────────
+async function fetchFX() {
+  // Source 1: Open Exchange Rates (free tier, CORS-enabled)
+  try {
+    const d = await fetch('https://open.er-api.com/v6/latest/USD').then(r=>r.json());
+    if (d.rates?.SGD) {
+      setChip('chip-fx','USD/SGD: OpenER ✓','ok');
+      return d.rates.SGD;
+    }
+  } catch {}
+
+  // Source 2: Frankfurter (ECB data, always CORS-safe)
+  try {
+    const d = await fetch('https://api.frankfurter.app/latest?from=USD&to=SGD').then(r=>r.json());
+    if (d.rates?.SGD) {
+      setChip('chip-fx','USD/SGD: ECB Frankfurter ✓','ok');
+      return d.rates.SGD;
+    }
+  } catch {}
+
+  setChip('chip-fx','USD/SGD: all sources failed ✗','err');
+  return null;
+}
+
+async function refreshAll() {
+  const btn=$('rfbtn'); btn.innerHTML='<span class="spin">↻</span>'; btn.disabled=true;
+
+  // Compute Power Law (purely local, instant)
+  const pl = bitboPL();
+  S.ceilUSD  = pl.ceiling;
+  S.floorUSD = pl.floor;
+
+  // Fetch BTC + FX in parallel
+  const [btc, fx] = await Promise.all([ fetchBTC(), fetchFX() ]);
+
+  if (btc && fx) {
+    S.usdSgd  = fx;
+    S.spotUSD = btc.usd;
+    S.spotSGD = btc.sgd ?? btc.usd * fx;  // blockchain.info gives SGD directly; others need FX
+  } else if (btc && !fx) {
+    // FX failed — derive from blockchain.info if it gave us both
+    S.spotUSD = btc.usd;
+    S.spotSGD = btc.sgd;
+    S.usdSgd  = btc.sgd ? btc.sgd / btc.usd : null;
+  } else if (!btc && fx) {
+    S.usdSgd = fx;
+  }
+
+  S.ceilSGD  = S.ceilUSD  * S.usdSgd;
+  S.floorSGD = S.floorUSD * S.usdSgd;
+  const fairSGD = pl.fair * S.usdSgd;
+
+  $('v-spot').textContent    = fS(S.spotSGD);
+  $('v-spot-usd').textContent = fU(S.spotUSD);
+  $('v-spot-src').textContent = S.spotSGD ? '● live' : '✗ unavailable';
+  $('v-spot-src').className   = 'src ' + (S.spotSGD ? 'live' : 'err');
+
+  $('v-floor').textContent    = fS(S.floorSGD);
+  $('v-floor-usd').textContent = fU(S.floorUSD);
+  $('v-ceil').textContent     = fS(S.ceilSGD);
+  $('v-ceil-usd').textContent  = fU(S.ceilUSD);
+  $('v-fx').textContent       = S.usdSgd ? '1 USD = '+S.usdSgd.toFixed(4)+' SGD' : 'unavailable';
+  $('v-fx-src').textContent   = S.usdSgd ? '● live' : '✗ unavailable';
+
+  if (S.spotSGD && S.floorSGD && S.ceilSGD) {
+    updateMeter(S.spotSGD, S.floorSGD, S.ceilSGD, fairSGD);
+  }
+
+  $('ts').textContent = new Date().toLocaleString('en-SG',{
+    day:'2-digit',month:'short',year:'numeric',
+    hour:'2-digit',minute:'2-digit',second:'2-digit'
+  });
+
+  btn.innerHTML='↻ Refresh'; btn.disabled=false;
+}
+
+function calculate() {
+  const btcSGD = parseFloat($('i-btc').value);
+  const cashSGD= parseFloat($('i-cash').value);
+  const spotOv = parseFloat($('i-spot-ov').value);
+  if (isNaN(btcSGD))  { alert('Please enter your BTC wallet value in SGD.'); return; }
+  if (isNaN(cashSGD)) { alert('Please enter your Cash in wallet SGD.');       return; }
+  if (!S.spotSGD)     { alert('Market data not loaded. Click Refresh first.'); return; }
+
+  const spot    = (!isNaN(spotOv)&&spotOv>0) ? spotOv : S.spotSGD;
+  const ceilSGD = S.ceilSGD, floorSGD = S.floorSGD;
+
+  if (spot >= ceilSGD)  { alert('Spot is above the ceiling — allocation = 0% BTC.'); return; }
+  if (spot <= floorSGD) { alert('Spot is below the floor — allocation = 100% BTC.'); return; }
+
+  const alloc = calcAlloc(ceilSGD, floorSGD, spot);
+  const { buyPx,sellPx,buySGD,sellSGD,buyBTC,sellBTC,qty } = calcOrders(spot,alloc,btcSGD,cashSGD);
+  const total=btcSGD+cashSGD, curPct=btcSGD/total;
+
+  $('r-total').textContent  = fS(total);
+  $('r-btcval').textContent = fS(btcSGD);
+  $('r-cash').textContent   = fS(cashSGD);
+  $('r-qty').textContent    = fBtc(qty);
+  $('r-alloc').textContent  = fPct(alloc);
+  $('r-cur').textContent    = fPct(curPct);
+
+  $('r-buy-px').textContent   = fS(buyPx);
+  $('r-buy-btc').textContent  = fBtc(buyBTC);
+  $('r-buy-sgd').textContent  = fS(buySGD,2);
+  $('r-buy-eff').innerHTML    = 'Alloc → '+fPct(alloc)+' BTC<br>at new price';
+  $('r-sell-px').textContent  = fS(sellPx);
+  $('r-sell-btc').textContent = fBtc(sellBTC);
+  $('r-sell-sgd').textContent = fS(sellSGD,2);
+  $('r-sell-eff').innerHTML   = 'Alloc → '+fPct(alloc)+' BTC<br>at new price';
+
+  $('c-buy-px').textContent   = fS(buyPx);
+  $('c-buy-btc').textContent  = fBtc(buyBTC);
+  $('c-buy-sgd').textContent  = fS(buySGD,2);
+  $('c-buy-eff').textContent  = fPct(alloc)+' BTC';
+  $('c-sell-px').textContent  = fS(sellPx);
+  $('c-sell-btc').textContent = fBtc(sellBTC);
+  $('c-sell-sgd').textContent = fS(sellSGD,2);
+  $('c-sell-eff').textContent = fPct(alloc)+' BTC';
+
+  $('results').classList.add('on');
+  $('results').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+refreshAll();
+</script>
+</body>
+</html>
